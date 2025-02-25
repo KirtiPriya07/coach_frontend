@@ -15,27 +15,16 @@ import { MediaDeviceFailure } from "livekit-client";
 import type { ConnectionDetails } from "./api/connection-details/route";
 import { NoAgentNotification } from "@/components/NoAgentNotification";
 import { CloseIcon } from "@/components/CloseIcon";
-import { useKrispNoiseFilter } from "@livekit/components-react/krisp";
+import VideoIcon from "@/components/VideoIcon";
+import WebcamToggle from "@/components/WebcamToggle"; // Import our new component
 
 export default function Page() {
-  const [connectionDetails, updateConnectionDetails] = useState<
-    ConnectionDetails | undefined
-  >(undefined);
+  const [connectionDetails, updateConnectionDetails] = useState<ConnectionDetails | undefined>(undefined);
   const [agentState, setAgentState] = useState<AgentState>("disconnected");
 
   const onConnectButtonClicked = useCallback(async () => {
-    // Generate room connection details, including:
-    //   - A random Room name
-    //   - A random Participant name
-    //   - An Access Token to permit the participant to join the room
-    //   - The URL of the LiveKit server to connect to
-    //
-    // In real-world application, you would likely allow the user to specify their
-    // own participant name, and possibly to choose from existing rooms to join.
-
     const url = new URL(
-      process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ??
-      "/api/connection-details",
+      process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? "/api/connection-details",
       window.location.origin
     );
     const response = await fetch(url.toString());
@@ -44,99 +33,91 @@ export default function Page() {
   }, []);
 
   return (
-    <main
-      data-lk-theme="default"
-      className="h-full grid content-center bg-[var(--lk-bg)]"
-    >
+    <main data-lk-theme="default" className="h-full bg-[var(--lk-bg)]">
       <LiveKitRoom
         token={connectionDetails?.participantToken}
         serverUrl={connectionDetails?.serverUrl}
         connect={connectionDetails !== undefined}
         audio={true}
-        video={false}
+        video={false} // initially, video is off
         onMediaDeviceFailure={onDeviceFailure}
-        onDisconnected={() => {
-          updateConnectionDetails(undefined);
-        }}
-        className="grid grid-rows-[2fr_1fr] items-center"
+        onDisconnected={() => updateConnectionDetails(undefined)}
+        className="h-full"
       >
-        <SimpleVoiceAssistant onStateChange={setAgentState} />
-        <ControlBar
-          onConnectButtonClicked={onConnectButtonClicked}
-          agentState={agentState}
-        />
-        <RoomAudioRenderer />
-        <NoAgentNotification state={agentState} />
+        <div className="grid grid-cols-[2fr_1fr] h-full gap-4 p-4">
+          {/* Left Column: Webcam Toggle */}
+          <div className="flex items-center justify-center bg-gray-100 rounded-lg p-4">
+            {agentState !== "disconnected" ? (
+              <WebcamToggle />
+            ) : (
+              <p className="text-gray-500">
+                Webcam will appear here after starting the conversation
+              </p>
+            )}
+          </div>
+
+          {/* Right Column: Voice Assistant and Controls */}
+          <div className="flex flex-col gap-4 justify-center items-center">
+            <SimpleVoiceAssistant onStateChange={setAgentState} />
+            <ControlBar onConnectButtonClicked={onConnectButtonClicked} agentState={agentState} />
+            <RoomAudioRenderer />
+            <NoAgentNotification state={agentState} />
+          </div>
+        </div>
       </LiveKitRoom>
     </main>
   );
 }
 
-function SimpleVoiceAssistant(props: {
-  onStateChange: (state: AgentState) => void;
-}) {
+function SimpleVoiceAssistant({ onStateChange }: { onStateChange: (state: AgentState) => void }) {
   const { state, audioTrack } = useVoiceAssistant();
   useEffect(() => {
-    props.onStateChange(state);
-  }, [props, state]);
+    onStateChange(state);
+  }, [onStateChange, state]);
   return (
-    <div className="h-[300px] max-w-[90vw] mx-auto">
+    <div className="w-full">
       <BarVisualizer
         state={state}
         barCount={5}
         trackRef={audioTrack}
-        className="agent-visualizer"
+        className="agent-visualizer w-full"
         options={{ minHeight: 24 }}
       />
     </div>
   );
 }
 
-function ControlBar(props: {
-  onConnectButtonClicked: () => void;
-  agentState: AgentState;
-}) {
-  /**
-   * Use Krisp background noise reduction when available.
-   * Note: This is only available on Scale plan, see {@link https://livekit.io/pricing | LiveKit Pricing} for more details.
-   */
-  const krisp = useKrispNoiseFilter();
-  useEffect(() => {
-    krisp.setNoiseFilterEnabled(true);
-  }, []);
-
+function ControlBar({ onConnectButtonClicked, agentState }: { onConnectButtonClicked: () => void; agentState: AgentState; }) {
   return (
-    <div className="relative h-[100px]">
-      <AnimatePresence>
-        {props.agentState === "disconnected" && (
+    <div className="relative w-full h-[100px]">
+      <AnimatePresence mode="wait">
+        {agentState === "disconnected" ? (
           <motion.button
-            initial={{ opacity: 0, top: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, top: "-10px" }}
-            transition={{ duration: 1, ease: [0.09, 1.04, 0.245, 1.055] }}
+            key="start-button"
+            initial={{ opacity: 0, y: 0 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.4, ease: [0.09, 1.04, 0.245, 1.055] }}
             className="uppercase absolute left-1/2 -translate-x-1/2 px-4 py-2 bg-white text-black rounded-md"
-            onClick={() => props.onConnectButtonClicked()}
+            onClick={onConnectButtonClicked}
           >
             Start a conversation
           </motion.button>
+        ) : (
+          <motion.div
+            key="control-panel"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.4, ease: [0.09, 1.04, 0.245, 1.055] }}
+            className="flex w-full justify-center items-center gap-4"
+          >
+            <VoiceAssistantControlBar controls={{ leave: false }} />
+            <DisconnectButton>
+              <CloseIcon />
+            </DisconnectButton>
+          </motion.div>
         )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {props.agentState !== "disconnected" &&
-          props.agentState !== "connecting" && (
-            <motion.div
-              initial={{ opacity: 0, top: "10px" }}
-              animate={{ opacity: 1, top: 0 }}
-              exit={{ opacity: 0, top: "-10px" }}
-              transition={{ duration: 0.4, ease: [0.09, 1.04, 0.245, 1.055] }}
-              className="flex h-8 absolute left-1/2 -translate-x-1/2  justify-center"
-            >
-              <VoiceAssistantControlBar controls={{ leave: false }} />
-              <DisconnectButton>
-                <CloseIcon />
-              </DisconnectButton>
-            </motion.div>
-          )}
       </AnimatePresence>
     </div>
   );
@@ -144,7 +125,5 @@ function ControlBar(props: {
 
 function onDeviceFailure(error?: MediaDeviceFailure) {
   console.error(error);
-  alert(
-    "Error acquiring camera or microphone permissions. Please make sure you grant the necessary permissions in your browser and reload the tab"
-  );
+  alert("Error acquiring camera or microphone permissions. Please ensure your browser permissions are enabled and reload the page.");
 }
