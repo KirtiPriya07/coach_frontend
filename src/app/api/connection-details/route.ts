@@ -10,7 +10,7 @@ const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
 
-// don't cache the results
+// Don't cache the results.
 export const revalidate = 0;
 
 export type ConnectionDetails = {
@@ -32,7 +32,8 @@ export async function GET() {
       throw new Error("LIVEKIT_API_SECRET is not defined");
     }
 
-    // Generate participant token
+    // Generate participant token for voice and vision (video).
+    // This token allows joining the room and publishing/subscribing to audio, video, and data.
     const participantIdentity = `voice_assistant_user_${Math.floor(Math.random() * 10_000)}`;
     const roomName = `voice_assistant_room_${Math.floor(Math.random() * 10_000)}`;
     const participantToken = await createParticipantToken(
@@ -40,11 +41,11 @@ export async function GET() {
       roomName,
     );
 
-    // Return connection details
+    // Return connection details.
     const data: ConnectionDetails = {
       serverUrl: LIVEKIT_URL,
       roomName,
-      participantToken: participantToken,
+      participantToken,
       participantName: participantIdentity,
     };
     const headers = new Headers({
@@ -59,6 +60,10 @@ export async function GET() {
   }
 }
 
+/**
+ * Creates a participant token that grants permission to join the room and to publish/subscribe to audio, video, and data.
+ * This token supports both voice and vision communication.
+ */
 function createParticipantToken(
   userInfo: AccessTokenOptions,
   roomName: string

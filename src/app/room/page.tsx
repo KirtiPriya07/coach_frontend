@@ -10,27 +10,19 @@ import {
   AgentState,
   DisconnectButton,
 } from "@livekit/components-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { MediaDeviceFailure } from "livekit-client";
-import type { ConnectionDetails } from "./api/connection-details/route";
+import type { ConnectionDetails } from "../api/connection-details/route";
 import { NoAgentNotification } from "@/components/NoAgentNotification";
 import { CloseIcon } from "@/components/CloseIcon";
-import VideoIcon from "@/components/VideoIcon";
 import WebcamToggle from "@/components/WebcamToggle";
+import { useKrispNoiseFilter } from "@livekit/components-react/krisp";
 
-export default function Page() {
+export default function RoomPage() {
+  // Connection details might be provided from a previous page or fetched on mount.
   const [connectionDetails, updateConnectionDetails] = useState<ConnectionDetails | undefined>(undefined);
-  const [agentState, setAgentState] = useState<AgentState>("disconnected");
-
-  const onConnectButtonClicked = useCallback(async () => {
-    const url = new URL(
-      process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? "/api/connection-details",
-      window.location.origin
-    );
-    const response = await fetch(url.toString());
-    const connectionDetailsData = await response.json();
-    updateConnectionDetails(connectionDetailsData);
-  }, []);
+  // We force the state to remain "active" on this page.
+  const [agentState] = useState<AgentState>("active" as AgentState);
 
   return (
     <main data-lk-theme="default" className="h-full bg-[var(--lk-bg)]">
@@ -39,27 +31,21 @@ export default function Page() {
         serverUrl={connectionDetails?.serverUrl}
         connect={connectionDetails !== undefined}
         audio={true}
-        video={false} // Video is disabled in the LiveKitRoom since we use our custom webcam component.
+        video={false} // Video is off by default; you can publish your camera separately.
         onMediaDeviceFailure={onDeviceFailure}
         onDisconnected={() => updateConnectionDetails(undefined)}
         className="h-full"
       >
         <div className="grid grid-cols-[2fr_1fr] h-full gap-4 p-4">
-          {/* Left Column: Webcam Toggle */}
+          {/* Left Column: Webcam */}
           <div className="flex items-center justify-center bg-gray-100 rounded-lg p-4">
-            {agentState !== "disconnected" ? (
-              <WebcamToggle />
-            ) : (
-              <p className="text-gray-500">
-                Webcam will appear here after starting the conversation
-              </p>
-            )}
+            <WebcamToggle />
           </div>
 
-          {/* Right Column: Voice Assistant and Controls */}
+          {/* Right Column: Voice Assistance and Controls */}
           <div className="flex flex-col gap-4 justify-center items-center">
-            <SimpleVoiceAssistant onStateChange={setAgentState} />
-            <ControlBar onConnectButtonClicked={onConnectButtonClicked} agentState={agentState} />
+            <SimpleVoiceAssistant onStateChange={() => {}} />
+            <ControlBar agentState={agentState} />
             <RoomAudioRenderer />
             <NoAgentNotification state={agentState} />
           </div>
@@ -70,14 +56,17 @@ export default function Page() {
 }
 
 function SimpleVoiceAssistant({ onStateChange }: { onStateChange: (state: AgentState) => void }) {
-  const { state, audioTrack } = useVoiceAssistant();
+  const { audioTrack } = useVoiceAssistant();
   useEffect(() => {
-    onStateChange(state);
-  }, [onStateChange, state]);
+    // Log the voice assistant state for debugging.
+    // Do not update the parent so that the state remains "active".
+    console.log("VoiceAssistant is active");
+  }, []);
   return (
     <div className="w-full">
       <BarVisualizer
-        state={state}
+        // Force the state to be "active"
+        state={"active" as AgentState}
         barCount={5}
         trackRef={audioTrack}
         className="agent-visualizer w-full"
@@ -87,36 +76,23 @@ function SimpleVoiceAssistant({ onStateChange }: { onStateChange: (state: AgentS
   );
 }
 
-function ControlBar({
-  onConnectButtonClicked,
-  agentState,
-}: {
-  onConnectButtonClicked: () => void;
-  agentState: AgentState;
-}) {
+function ControlBar({ agentState }: { agentState: AgentState }) {
+  const krisp = useKrispNoiseFilter();
+  useEffect(() => {
+    krisp.setNoiseFilterEnabled(true);
+  }, [krisp]);
+
   return (
     <div className="relative w-full h-[100px]">
       <AnimatePresence mode="wait">
-        {agentState === "disconnected" ? (
-          <motion.button
-            key="start-button"
-            initial={{ opacity: 0, y: 0 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.4, ease: [0.09, 1.04, 0.245, 1.055] }}
-            className="uppercase absolute left-1/2 -translate-x-1/2 px-4 py-2 bg-white text-black rounded-md"
-            onClick={onConnectButtonClicked}
-          >
-            Start a conversation
-          </motion.button>
-        ) : (
+        {agentState !== "connecting" && (
           <motion.div
             key="control-panel"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, top: "10px" }}
+            animate={{ opacity: 1, top: 0 }}
+            exit={{ opacity: 0, top: "-10px" }}
             transition={{ duration: 0.4, ease: [0.09, 1.04, 0.245, 1.055] }}
-            className="flex w-full justify-center items-center gap-4"
+            className="flex h-8 absolute left-1/2 -translate-x-1/2 justify-center items-center gap-4"
           >
             <VoiceAssistantControlBar controls={{ leave: false }} />
             <DisconnectButton>
